@@ -37,6 +37,7 @@ MM.defaults = {
 	queueAuto = true,
 	sentKeep = 10,
 	minimap = true,
+	versionCheck = true,
 	minimapAngle = 200,
 	theme = "Gold",
 	folded = {},
@@ -545,3 +546,68 @@ SlashCmdList.MAILMASTER = function(msg)
 		MM.Options:Open()
 	end
 end
+
+------------------------------------------------------------------------
+-- Version check: players with MailMaster tell each other their version
+-- (hidden addon messages in guild / group / raid / battleground)
+------------------------------------------------------------------------
+local VPREFIX = "MailMaster"
+local notified, lastGroupSend, lastReply = false, 0, {}
+
+local function VersionNumber(v)
+	local a, b, c = tostring(v or ""):match("(%d+)%.?(%d*)%.?(%d*)")
+	return (tonumber(a) or 0) * 10000 + (tonumber(b) or 0) * 100 + (tonumber(c) or 0)
+end
+
+local function SendVersion(channel, target)
+	if channel == "WHISPER" and not target then return end
+	SendAddonMessage(VPREFIX, "V:" .. MM.version, channel, target)
+end
+
+local function GroupChannel()
+	local _, instanceType = IsInInstance()
+	if instanceType == "pvp" then return "BATTLEGROUND" end
+	if GetNumRaidMembers() > 0 then return "RAID" end
+	if GetNumPartyMembers() > 0 then return "PARTY" end
+end
+
+local function SendToGroup()
+	if GetTime() - lastGroupSend < 60 then return end
+	local ch = GroupChannel()
+	if ch then
+		lastGroupSend = GetTime()
+		SendVersion(ch)
+	end
+end
+
+MM:On("CHAT_MSG_ADDON", function(prefix, msg, channel, sender)
+	if prefix ~= VPREFIX or not msg or sender == MM.player then return end
+	local v = msg:match("^V:(.+)$")
+	if not v then return end
+	local theirs, mine = VersionNumber(v), VersionNumber(MM.version)
+	if theirs > mine then
+		if not notified and MM.db and MM.db.versionCheck then
+			notified = true
+			MM:Print(format("|cff40ff40A newer version (%s) is available|r - you have %s. Download: github.com/Feralpaw69/MailMaster", v, MM.version))
+		end
+	elseif theirs < mine then
+		-- let them know a newer one exists (at most once per 10 minutes per player)
+		if not lastReply[sender] or GetTime() - lastReply[sender] > 600 then
+			lastReply[sender] = GetTime()
+			SendVersion("WHISPER", sender)
+		end
+	end
+end)
+
+local sentGuild = false
+MM:On("PLAYER_ENTERING_WORLD", function()
+	MM:After(15, function()
+		if not sentGuild and IsInGuild() then
+			sentGuild = true
+			SendVersion("GUILD")
+		end
+		SendToGroup()
+	end)
+end)
+MM:On("PARTY_MEMBERS_CHANGED", function() MM:After(3, SendToGroup) end)
+MM:On("RAID_ROSTER_UPDATE", function() MM:After(3, SendToGroup) end)

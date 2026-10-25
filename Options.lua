@@ -362,6 +362,8 @@ local function Appearance(p)
 	Check(p, "Minimap button", "minimap", 208, -58,
 		"Left-click: prepared mail. Shift-click: sent mail log. Right-click: options. Drag to move.",
 		function() MM.Log:ApplyMinimap() end)
+	Check(p, "Tell me about new versions", "versionCheck", 208, -80,
+		"Players with MailMaster in your guild or group quietly share their version. If someone has a newer one, you get a message once.")
 
 	Header(p, "Settings profile", 16, -110)
 	Note(p, "By default all characters share one set of settings.", 16, -130, 390)

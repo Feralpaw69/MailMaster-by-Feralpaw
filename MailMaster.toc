@@ -1,6 +1,6 @@
 ## Interface: 30300
 ## Title: MailMaster
-## Version: 1.3.2
+## Version: 1.4.1
 ## Author: feralpaw
 ## Notes: Fast mail opening, contacts, Alt-slide attaching, send rules, alt inbox overview. /mm
 ## SavedVariables: MailMasterDB

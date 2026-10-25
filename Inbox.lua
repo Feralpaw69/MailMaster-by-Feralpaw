@@ -8,6 +8,9 @@ local GetInboxHeaderInfo, GetInboxNumItems, GetInboxItemLink = GetInboxHeaderInf
 local ROWS = INBOXITEMS_TO_DISPLAY or 7
 local MAX_ATTACH = ATTACHMENTS_MAX_RECEIVE or 12
 local VERIFY_DELAY, BAG_RECHECK, MAX_PASSES = 1.0, 0.5, 6
+-- "cruise control": at most this many requests waiting for the server at once
+local MAX_INFLIGHT, INFLIGHT_TIMEOUT = 4, 0.6
+local inflight, waitSince = 0, nil
 
 -- sender, subject, money, cod, daysLeft, items, wasRead, wasReturned, textCreated, canReply, isGM
 local function H(i)
@@ -106,6 +109,16 @@ function Inbox.Step()
 	stepTimer = nil
 	local j = Inbox.busy
 	if not j or j.kind ~= "open" then return end
+	-- wait until the server has answered some of the requests already sent
+	if inflight >= MAX_INFLIGHT then
+		waitSince = waitSince or GetTime()
+		if GetTime() - waitSince < INFLIGHT_TIMEOUT then
+			stepTimer = MM:After(0.02, Inbox.Step)
+			return
+		end
+		inflight = 0 -- server went quiet: don't stall, carry on
+	end
+	waitSince = nil
 	while ti <= #targets do
 		local i = targets[ti]
 		local _, subject, money, _, _, items = H(i)
@@ -134,6 +147,7 @@ function Inbox.Step()
 					MM:Print(format("Only %d free bag slots left - taking gold only.", freeSlots))
 				else
 					TakeInboxItem(i, attachIndex)
+					inflight = inflight + 1
 					freeSlots = freeSlots - 1
 					bagRechecked = false
 					attachIndex = attachIndex - 1
@@ -146,14 +160,16 @@ function Inbox.Step()
 		attachIndex = nil
 		if money and money > 0 then
 			TakeInboxMoney(i)
+			inflight = inflight + 1
 			stepTimer = MM:After(MM.db.speed, Inbox.Step)
 			return
 		end
 	end
-	stepTimer = MM:After(VERIFY_DELAY, Inbox.Verify)
+	stepTimer = MM:After(inflight > 0 and VERIFY_DELAY or 0.5, Inbox.Verify)
 end
 
 local function BeginPass(list)
+	inflight, waitSince = 0, nil
 	targets, ti, attachIndex = list, 1, nil
 	freeSlots = MM:FreeBagSlots()
 	bagRechecked = false
@@ -730,6 +746,7 @@ function Inbox:Init()
 		Inbox:ClearSelection()
 	end)
 	MM:On("MAIL_INBOX_UPDATE", function()
+		if inflight > 0 then inflight = inflight - 1 end -- the server answered one request
 		if not Inbox.open then return end
 		local n = GetInboxNumItems()
 		if n ~= lastCount then
