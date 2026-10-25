@@ -78,8 +78,9 @@ Lightweight: plain Lua, no libraries, windows are only created when you open the
 
 ## Installation
 1. Download the latest ZIP from **Releases** (or *Code → Download ZIP*).
-2. Copy the `MailMaster` folder into `World of Warcraft/Interface/AddOns/`.
-   The folder name must stay exactly like this (no `-main` suffix).
+2. Copy the `MailMaster` folder from the ZIP into `World of Warcraft/Interface/AddOns/`.
+   With *Code → Download ZIP* it sits inside `MailMaster-by-Feralpaw-main` – copy only the inner `MailMaster` folder.
+   The folder name must stay exactly `MailMaster`.
 3. Disable any other mail addon so they don't fight over the mailbox.
 4. Restart the game or type `/reload`.
 
