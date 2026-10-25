@@ -500,9 +500,6 @@ MM:On("PLAYER_LOGIN", function()
 	if MM.Viewer then MM.Viewer:Init() end
 	if MM.Options then MM.Options:Init() end
 
-	if IsAddOnLoaded("Postal") then
-		MM:Print("|cffff6060Postal is also enabled. Disable Postal so the two addons don't fight over the mailbox.|r")
-	end
 end)
 
 MM:On("PLAYER_LEVEL_UP", function(level)
