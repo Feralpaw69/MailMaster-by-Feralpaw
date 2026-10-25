@@ -14,8 +14,10 @@ local inflight, waitSince = 0, nil
 local stats -- timing numbers for /mm debug
 
 -- the server answered something (inbox update, gold, item, error): one request less in flight
+local lastActivity, settleStart = 0, 0
 local function Ack()
 	if inflight > 0 then inflight = inflight - 1 end
+	lastActivity = GetTime()
 end
 
 -- sender, subject, money, cod, daysLeft, items, wasRead, wasReturned, textCreated, canReply, isGM
@@ -159,6 +161,7 @@ function Inbox.Step()
 				else
 					TakeInboxItem(i, attachIndex)
 					inflight = inflight + 1
+					lastActivity = GetTime()
 					if stats then stats.req = stats.req + 1 end
 					freeSlots = freeSlots - 1
 					bagRechecked = false
@@ -173,12 +176,28 @@ function Inbox.Step()
 		if money and money > 0 then
 			TakeInboxMoney(i)
 			inflight = inflight + 1
+			lastActivity = GetTime()
 			if stats then stats.req = stats.req + 1 end
 			stepTimer = MM:After(MM.db.speed, Inbox.Step)
 			return
 		end
 	end
-	stepTimer = MM:After(inflight > 0 and VERIFY_DELAY or 0.5, Inbox.Verify)
+	-- all requests sent: wait until the server has answered them and gone quiet, then check
+	settleStart = GetTime()
+	Inbox.Settle()
+end
+
+function Inbox.Settle()
+	stepTimer = nil
+	if not Inbox.busy then return end
+	local now = GetTime()
+	local busyServer = inflight > 0 or now - lastActivity < 0.3
+	if busyServer and now - settleStart < 3 then
+		stepTimer = MM:After(0.05, Inbox.Settle)
+		return
+	end
+	if stats then stats.settle = (stats.settle or 0) + (now - settleStart) end
+	Inbox.Verify()
 end
 
 local function BeginPass(list)
@@ -305,8 +324,8 @@ function Inbox:Stop(user)
 	stepTimer, waitTimer = nil, nil
 	Inbox.busy = nil
 	if stats and MM.db.debug then
-		MM:Print(format("Debug: %d requests in %.1fs, %d check pass(es), waited for the server %d times (%.1fs total), %d timeouts.",
-			stats.req, GetTime() - stats.start, (pass or 1) - 1, stats.waits, stats.waited, stats.timeouts))
+		MM:Print(format("Debug: %d requests in %.1fs, %d check pass(es), waited for the server %d times (%.1fs total), %d timeouts, %.1fs waiting at the end.",
+			stats.req, GetTime() - stats.start, (pass or 1) - 1, stats.waits, stats.waited, stats.timeouts, stats.settle or 0))
 	end
 	stats = nil
 	Inbox:SetBusyUI(false)
