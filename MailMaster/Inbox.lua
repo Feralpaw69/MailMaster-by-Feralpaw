@@ -9,8 +9,14 @@ local ROWS = INBOXITEMS_TO_DISPLAY or 7
 local MAX_ATTACH = ATTACHMENTS_MAX_RECEIVE or 12
 local VERIFY_DELAY, BAG_RECHECK, MAX_PASSES = 1.0, 0.5, 6
 -- "cruise control": at most this many requests waiting for the server at once
-local MAX_INFLIGHT, INFLIGHT_TIMEOUT = 4, 0.6
+local MAX_INFLIGHT, INFLIGHT_TIMEOUT = 4, 0.35
 local inflight, waitSince = 0, nil
+local stats -- timing numbers for /mm debug
+
+-- the server answered something (inbox update, gold, item, error): one request less in flight
+local function Ack()
+	if inflight > 0 then inflight = inflight - 1 end
+end
 
 -- sender, subject, money, cod, daysLeft, items, wasRead, wasReturned, textCreated, canReply, isGM
 local function H(i)
@@ -111,13 +117,18 @@ function Inbox.Step()
 	if not j or j.kind ~= "open" then return end
 	-- wait until the server has answered some of the requests already sent
 	if inflight >= MAX_INFLIGHT then
-		waitSince = waitSince or GetTime()
+		if not waitSince then
+			waitSince = GetTime()
+			if stats then stats.waits = stats.waits + 1 end
+		end
 		if GetTime() - waitSince < INFLIGHT_TIMEOUT then
-			stepTimer = MM:After(0.02, Inbox.Step)
+			stepTimer = MM:After(0.01, Inbox.Step)
 			return
 		end
 		inflight = 0 -- server went quiet: don't stall, carry on
+		if stats then stats.timeouts = stats.timeouts + 1 end
 	end
+	if waitSince and stats then stats.waited = stats.waited + (GetTime() - waitSince) end
 	waitSince = nil
 	while ti <= #targets do
 		local i = targets[ti]
@@ -148,6 +159,7 @@ function Inbox.Step()
 				else
 					TakeInboxItem(i, attachIndex)
 					inflight = inflight + 1
+					if stats then stats.req = stats.req + 1 end
 					freeSlots = freeSlots - 1
 					bagRechecked = false
 					attachIndex = attachIndex - 1
@@ -161,6 +173,7 @@ function Inbox.Step()
 		if money and money > 0 then
 			TakeInboxMoney(i)
 			inflight = inflight + 1
+			if stats then stats.req = stats.req + 1 end
 			stepTimer = MM:After(MM.db.speed, Inbox.Step)
 			return
 		end
@@ -194,6 +207,7 @@ function Inbox:StartOpen(j)
 	j.kind = "open"
 	Inbox.busy = j
 	invFull, pass, lastRemaining = nil, 1, nil
+	stats = { start = GetTime(), req = 0, waits = 0, timeouts = 0, waited = 0 }
 	Inbox:SetBusyUI(true)
 	local list, remaining = BuildTargets(j)
 	if #list == 0 then return Inbox:AfterPasses() end
@@ -290,6 +304,11 @@ function Inbox:Stop(user)
 	MM:Cancel(waitTimer)
 	stepTimer, waitTimer = nil, nil
 	Inbox.busy = nil
+	if stats and MM.db.debug then
+		MM:Print(format("Debug: %d requests in %.1fs, %d check pass(es), waited for the server %d times (%.1fs total), %d timeouts.",
+			stats.req, GetTime() - stats.start, (pass or 1) - 1, stats.waits, stats.waited, stats.timeouts))
+	end
+	stats = nil
 	Inbox:SetBusyUI(false)
 	Inbox:UpdateSummary(true)
 	if Inbox.open then Inbox:Snapshot() end
@@ -746,7 +765,7 @@ function Inbox:Init()
 		Inbox:ClearSelection()
 	end)
 	MM:On("MAIL_INBOX_UPDATE", function()
-		if inflight > 0 then inflight = inflight - 1 end -- the server answered one request
+		Ack()
 		if not Inbox.open then return end
 		local n = GetInboxNumItems()
 		if n ~= lastCount then
@@ -782,6 +801,7 @@ function Inbox:Init()
 	end)
 	MM:On("PLAYER_LEAVING_WORLD", function() Inbox:Stop() end)
 	MM:On("PLAYER_MONEY", function()
+		if Inbox.busy then Ack() end
 		if not Inbox.open then return end
 		local m = GetMoney()
 		if m > rakeMoney then
@@ -793,7 +813,9 @@ function Inbox:Init()
 	end)
 	MM:On("UI_ERROR_MESSAGE", function(msg)
 		if Inbox.busy and msg == ERR_INV_FULL then invFull = true end
+		if Inbox.busy then Ack() end
 	end)
+	MM:On("BAG_UPDATE", function() if Inbox.busy then Ack() end end)
 end
 
 ------------------------------------------------------------------------

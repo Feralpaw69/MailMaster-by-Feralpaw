@@ -529,6 +529,9 @@ SlashCmdList.MAILMASTER = function(msg)
 		MM.Log:Show()
 	elseif cmd == "queue" or cmd == "prep" then
 		MM.Queue:Show()
+	elseif cmd == "debug" then
+		MM.db.debug = not MM.db.debug
+		MM:Print("Debug timing " .. (MM.db.debug and "on - run Open All, the numbers are printed when it finishes." or "off."))
 	elseif cmd == "stop" then
 		MM.Inbox:Stop(true)
 	elseif cmd == "help" or cmd == "?" then
