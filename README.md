@@ -4,6 +4,8 @@
 
 **Collects mail 10× faster than usual mail addons and up to 30× faster than the server default, and sends in a fraction of the clicks.**
 Lightweight: plain Lua, no libraries, windows are only created when you open them.
+<img width="905" height="763" alt="image" src="https://github.com/user-attachments/assets/fafd8e79-949a-408a-b126-5c3c3a401985" /> <img width="574" height="752" alt="image" src="https://github.com/user-attachments/assets/b5c17ed1-07d3-4895-bffa-331ddcc2a65b" />
+
 
 ## Features
 
