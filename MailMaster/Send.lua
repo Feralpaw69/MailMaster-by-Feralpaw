@@ -860,7 +860,6 @@ local function QueueRefresh()
 	end)
 end
 
-local oldBlock
 function Send:Init()
 	-- Alt-slide: works with every bag addon that shows the normal item tooltip
 	hooksecurefunc(GameTooltip, "SetBagItem", function(_, bag, slot)
@@ -1010,20 +1009,22 @@ function Send:Init()
 	MM:On("GUILD_ROSTER_UPDATE", QueueRefresh)
 
 	-- Trade / invite block while the mailbox is open
-	MM:On("MAIL_SHOW", function()
-		if MM.db.blockTrade and not oldBlock then
-			oldBlock = GetCVar("BlockTrades")
-			SetCVar("BlockTrades", "1")
+	-- Trades are cancelled only while the mailbox is open. The game's own
+	-- "Block Trades" setting is no longer touched (older versions changed it,
+	-- and a crash or disconnect at the mailbox could leave it switched on).
+	MM:On("TRADE_SHOW", function()
+		if MM.Inbox.open and MM.db.blockTrade then
+			CancelTrade()
+			MM:Print("Cancelled a trade while at the mailbox (/mm > Sending to allow trades).")
 		end
 	end)
-	local function restore()
-		if oldBlock then
-			SetCVar("BlockTrades", oldBlock)
-			oldBlock = nil
+	if not MailMasterDB.tradeFix then
+		MailMasterDB.tradeFix = true
+		if GetCVar("BlockTrades") == "1" then
+			SetCVar("BlockTrades", "0")
+			MM:Print("The game's Block Trades setting was left on by an older MailMaster version - switched it off again.")
 		end
 	end
-	MM:On("MAIL_CLOSED", restore)
-	MM:On("PLAYER_LOGOUT", restore)
 	MM:On("PARTY_INVITE_REQUEST", function(name)
 		if MM.Inbox.open and MM.db.blockParty then
 			DeclineGroup()
