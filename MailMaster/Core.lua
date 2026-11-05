@@ -29,7 +29,6 @@ MM.defaults = {
 	codHelper = true,
 	contacts = true,
 	autocomplete = true,
-	blockTrade = true,
 	blockGuild = true,
 	blockParty = false,
 	rulesAuto = false,

@@ -227,9 +227,8 @@ local function Sending(p)
 	qb:SetScript("OnClick", function() MM.Queue:Show() end)
 
 	Header(p, "While the mailbox is open", 16, -280)
-	Check(p, "Block trade requests", "blockTrade", 12, -298)
-	Check(p, "Decline guild invites", "blockGuild", 12, -322)
-	Check(p, "Decline group invites", "blockParty", 12, -346)
+	Check(p, "Decline guild invites", "blockGuild", 12, -298)
+	Check(p, "Decline group invites", "blockParty", 12, -322)
 end
 
 local function Rules(p)

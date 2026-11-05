@@ -1009,15 +1009,8 @@ function Send:Init()
 	MM:On("GUILD_ROSTER_UPDATE", QueueRefresh)
 
 	-- Trade / invite block while the mailbox is open
-	-- Trades are cancelled only while the mailbox is open. The game's own
-	-- "Block Trades" setting is no longer touched (older versions changed it,
-	-- and a crash or disconnect at the mailbox could leave it switched on).
-	MM:On("TRADE_SHOW", function()
-		if MM.Inbox.open and MM.db.blockTrade then
-			CancelTrade()
-			MM:Print("Cancelled a trade while at the mailbox (/mm > Sending to allow trades).")
-		end
-	end)
+	-- Older versions switched the game's "Block Trades" setting on at the mailbox;
+	-- a crash there could leave it on. Switch it off once.
 	if not MailMasterDB.tradeFix then
 		MailMasterDB.tradeFix = true
 		if GetCVar("BlockTrades") == "1" then

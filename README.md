@@ -42,7 +42,7 @@ Lightweight: plain Lua, no libraries, windows are only created when you open the
 - **Send rules** like *herbs → HerbAlt* or *never send item X*. One click sends everything that matches, with a preview first.
 - **Wire**: when you send gold, the amount goes into the subject.
 - **CoD helper**: suggests a price from AuctionaryPro / Auctionary, Auctionator or the vendor price.
-- Blocks trade requests and guild invites while the mailbox is open. Blocking group invites is optional.
+- Declines guild invites while the mailbox is open. Declining group invites is optional.
 
 ### Prepared mail (outbox)
 - Prepare mails anywhere: recipient, gold, subject and up to 12 different items (a set amount or "all").
