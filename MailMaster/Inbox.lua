@@ -295,7 +295,7 @@ function Inbox:WaitForServer(shown)
 		-- ask often at first (servers without a limit answer right away), then every 5s
 		if waited > 0 and ((waited <= 20 and waited % 2 == 0) or waited % 5 == 0) then CheckInbox() end
 		Inbox:UpdateSummary()
-		if waited > 180 then
+		if waited > 180 and not MM.db.watchNew then
 			MM:Print("The server didn't send more mail. Stopped.")
 			return Inbox:Stop()
 		end
@@ -346,8 +346,48 @@ function Inbox:RunActions(list)
 	nextAct()
 end
 
+------------------------------------------------------------------------
+-- Watch mode: after Open All, keep asking the server for new mail while
+-- the mailbox is open and collect it as soon as it shows up.
+------------------------------------------------------------------------
+local watchTimer
+function Inbox:StopWatch()
+	Inbox.watching = nil
+	MM:Cancel(watchTimer)
+	watchTimer = nil
+end
+
+function Inbox:StartWatch()
+	local _, total = GetInboxNumItems()
+	Inbox.watchBase = total or 0
+	if Inbox.watching then return end
+	Inbox.watching = true
+	local function tick()
+		watchTimer = nil
+		if not Inbox.watching or not Inbox.open then return Inbox:StopWatch() end
+		if not Inbox.busy then CheckInbox() end
+		watchTimer = MM:After(5, tick)
+	end
+	watchTimer = MM:After(5, tick)
+	Inbox:UpdateSummary(true)
+end
+
+-- called on every inbox update while watching
+function Inbox:CheckWatch()
+	if not Inbox.watching or Inbox.busy or not Inbox.open then return end
+	local _, total = GetInboxNumItems()
+	total = total or 0
+	if total > (Inbox.watchBase or 0) then
+		Inbox.watchBase = total
+		Inbox:OpenAll(false)
+	elseif total < (Inbox.watchBase or 0) then
+		Inbox.watchBase = total
+	end
+end
+
 function Inbox:Stop(user)
 	if not Inbox.busy then return end
+	local wasOpenAll = Inbox.busy.openAll
 	MM:Cancel(stepTimer)
 	MM:Cancel(waitTimer)
 	stepTimer, waitTimer = nil, nil
@@ -362,6 +402,11 @@ function Inbox:Stop(user)
 	Inbox:UpdateSummary(true)
 	if Inbox.open then Inbox:Snapshot() end
 	if user then MM:Print("Stopped.") end
+	if user then
+		Inbox:StopWatch()
+	elseif wasOpenAll and MM.db.watchNew and Inbox.open then
+		Inbox:StartWatch()
+	end
 	if InboxFrame:IsVisible() then InboxFrame_Update() end
 end
 
@@ -419,6 +464,7 @@ function Inbox:UpdateSummary(force)
 	if cod > 0 then t = t .. " · " .. cod .. " CoD" end
 	if soon > 0 then t = t .. format(" · |cffff8000%d expiring|r", soon) end
 	if MM.db.rake and (Inbox.collected or 0) > 0 then t = t .. " · |cff40ff40+" .. MM:Money(Inbox.collected, true) .. "|r" end
+	if Inbox.watching and not j then t = t .. " · |cff40ff40watching for new mail|r" end
 	summary:SetText(t)
 end
 
@@ -554,6 +600,8 @@ local function ShowFilterMenu(anchor)
 	menu[#menu + 1] = { text = "Other mail", isTitle = true, notCheckable = true }
 	for _, k in ipairs({ "PlayerItems", "PlayerGold", "System" }) do add(k) end
 	menu[#menu + 1] = { text = "Options", isTitle = true, notCheckable = true }
+	menu[#menu + 1] = { text = "  Keep collecting new mail", checked = MM.db.watchNew, isNotRadio = true, keepShownOnClick = true,
+		func = function() MM.db.watchNew = not MM.db.watchNew; if not MM.db.watchNew then Inbox:StopWatch(); Inbox:UpdateSummary(true) end end }
 	menu[#menu + 1] = { text = "  Print each mail in chat", checked = MM.db.verbose, isNotRadio = true, keepShownOnClick = true,
 		func = function() MM.db.verbose = not MM.db.verbose end }
 	menu[#menu + 1] = { text = "  All settings...", notCheckable = true, func = function() MM.Options:Open() end }
@@ -816,6 +864,7 @@ function Inbox:Init()
 	MM:On("MAIL_INBOX_UPDATE", function()
 		Ack()
 		if not Inbox.open then return end
+		if Inbox.watching and not Inbox.busy then MM:After(0.3, function() Inbox:CheckWatch() end) end
 		local n = GetInboxNumItems()
 		if n ~= lastCount then
 			lastCount = n
@@ -841,6 +890,7 @@ function Inbox:Init()
 		if not Inbox.open then return end
 		Inbox:Snapshot()
 		Inbox:Stop()
+		Inbox:StopWatch()
 		Inbox.open = false
 		Inbox:ClearSelection()
 		if MM.db.rake and collected > 0 then

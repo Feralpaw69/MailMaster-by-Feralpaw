@@ -16,6 +16,7 @@ Lightweight: plain Lua, no libraries, windows are only created when you open the
 - **Filters** (gear button): AH sold / expired / cancelled / outbid / won, player mail with items, player mail with gold, system / Postmaster mail.
 - **Shift-click Open All** takes everything and ignores the filters. CoD and GM mail are never opened.
 - **Click Open All again** to stop.
+- **Keep collecting** (option): after Open All, MailMaster keeps watching while the mailbox is open and takes new mail (for example fresh auction sales) as soon as the server delivers it.
 - **Bag protection**: keeps a set number of slots free. When the bags are full it stops taking items but still takes gold.
 
 ### Inbox

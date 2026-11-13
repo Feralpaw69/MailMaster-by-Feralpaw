@@ -12,6 +12,7 @@ MM.defaults = {
 	speed = 0.03,        -- seconds between two take/return requests
 	keepFree = 1,        -- bag slots to keep free when taking items
 	verbose = false,     -- print every mail while opening
+	watchNew = false,    -- keep collecting new mail while the mailbox is open
 	chatFrame = 1,
 	filters = {
 		AHSold = true, AHExpired = true, AHCancelled = true, AHOutbid = true, AHWon = true,

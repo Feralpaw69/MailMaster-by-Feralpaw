@@ -197,7 +197,10 @@ local function Inbox(p)
 	Check(p, "Summary line", "summary", 208, -290, nil, function() if InboxFrame:IsVisible() then InboxFrame_Update() end end)
 	Check(p, "Show gold collected", "rake", 12, -312)
 	Check(p, "Print each mail in chat", "verbose", 208, -312)
-	Slider(p, "Expiry warning", "expiryDays", 1, 7, 1, 20, -358, "%d days", 170)
+	Check(p, "Keep collecting new mail while the mailbox is open", "watchNew", 12, -334,
+		"After Open All, MailMaster keeps asking the server for new mail every 5s and takes it right away (same filters as Open All). Stops when you close the mailbox.",
+		function(v) if not v then MM.Inbox:StopWatch(); MM.Inbox:UpdateSummary(true) end end)
+	Slider(p, "Expiry warning", "expiryDays", 1, 7, 1, 20, -380, "%d days", 170)
 	local frames = function()
 		local t = {}
 		for i = 1, NUM_CHAT_WINDOWS or 7 do
@@ -206,7 +209,7 @@ local function Inbox(p)
 		end
 		return t
 	end
-	Dropdown(p, "Chat window", 214, -344, 130, frames,
+	Dropdown(p, "Chat window", 214, -366, 130, frames,
 		function() return MM.db.chatFrame end, function(v) MM.db.chatFrame = v end)
 end
 
