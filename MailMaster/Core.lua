@@ -12,7 +12,7 @@ MM.defaults = {
 	speed = 0.03,        -- seconds between two take/return requests
 	keepFree = 1,        -- bag slots to keep free when taking items
 	verbose = false,     -- print every mail while opening
-	watchNew = false,    -- keep collecting new mail while the mailbox is open
+	watchNew = true,     -- keep collecting new mail while the mailbox is open
 	chatFrame = 1,
 	filters = {
 		AHSold = true, AHExpired = true, AHCancelled = true, AHOutbid = true, AHWon = true,
@@ -451,6 +451,11 @@ function MM:UseSettings()
 		MM.db = MailMasterCharDB.settings
 	else
 		MM.db = MailMasterDB.settings
+	end
+	-- 1.6.1: keep collecting is now on by default (1.6.0 saved it as off)
+	if not MM.db.watchV2 then
+		MM.db.watchNew = true
+		MM.db.watchV2 = true
 	end
 	-- 1.2.1: new faster default (only if the old default was never changed)
 	if not MM.db.speedV2 then
