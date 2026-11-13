@@ -7,7 +7,7 @@ local floor, format, min, max = floor, format, math.min, math.max
 local GetInboxHeaderInfo, GetInboxNumItems, GetInboxItemLink = GetInboxHeaderInfo, GetInboxNumItems, GetInboxItemLink
 local ROWS = INBOXITEMS_TO_DISPLAY or 7
 local MAX_ATTACH = ATTACHMENTS_MAX_RECEIVE or 12
-local VERIFY_DELAY, BAG_RECHECK, MAX_PASSES = 1.0, 0.5, 6
+local VERIFY_DELAY, BAG_RECHECK, MAX_PASSES = 1.0, 0.5, 12
 -- "cruise control": at most this many requests waiting for the server at once
 local MAX_INFLIGHT, INFLIGHT_TIMEOUT = 4, 0.35
 local inflight, waitSince = 0, nil
@@ -113,12 +113,23 @@ local function BuildTargets(j)
 	return list, remaining
 end
 
+-- First pass: full speed. Retry passes: one request at a time and slower,
+-- so a server that dropped requests gets them one by one.
+local function Pace()
+	if (pass or 1) >= 3 then return math.max(MM.db.speed, 0.25) end
+	if (pass or 1) >= 2 then return math.max(MM.db.speed, 0.12) end
+	return MM.db.speed
+end
+local function Limit()
+	return ((pass or 1) >= 2) and 1 or MAX_INFLIGHT
+end
+
 function Inbox.Step()
 	stepTimer = nil
 	local j = Inbox.busy
 	if not j or j.kind ~= "open" then return end
 	-- wait until the server has answered some of the requests already sent
-	if inflight >= MAX_INFLIGHT then
+	if inflight >= Limit() then
 		if not waitSince then
 			waitSince = GetTime()
 			if stats then stats.waits = stats.waits + 1 end
@@ -166,7 +177,7 @@ function Inbox.Step()
 					freeSlots = freeSlots - 1
 					bagRechecked = false
 					attachIndex = attachIndex - 1
-					stepTimer = MM:After(MM.db.speed, Inbox.Step)
+					stepTimer = MM:After(Pace(), Inbox.Step)
 					return
 				end
 			end
@@ -178,7 +189,7 @@ function Inbox.Step()
 			inflight = inflight + 1
 			lastActivity = GetTime()
 			if stats then stats.req = stats.req + 1 end
-			stepTimer = MM:After(MM.db.speed, Inbox.Step)
+			stepTimer = MM:After(Pace(), Inbox.Step)
 			return
 		end
 	end
@@ -213,10 +224,20 @@ function Inbox.Verify()
 	local j = Inbox.busy
 	if not j or j.kind ~= "open" then return end
 	local list, remaining = BuildTargets(j)
-	if remaining > 0 and pass < MAX_PASSES and (not lastRemaining or remaining < lastRemaining) then
-		lastRemaining = remaining
-		pass = pass + 1
-		return BeginPass(list)
+	j.leftover = nil
+	if remaining > 0 then
+		-- keep retrying (slower, one by one) until 3 passes in a row bring nothing
+		if lastRemaining and remaining >= lastRemaining then
+			j.stuck = (j.stuck or 0) + 1
+		else
+			j.stuck = 0
+		end
+		if j.stuck < 3 and pass < MAX_PASSES then
+			lastRemaining = remaining
+			pass = pass + 1
+			return BeginPass(list)
+		end
+		j.leftover = #list
 	end
 	Inbox:AfterPasses()
 end
@@ -242,9 +263,16 @@ function Inbox:AfterPasses()
 	if j.openAll then
 		local n, total = GetInboxNumItems()
 		if total > n then
+			if j.leftover and j.leftover > 0 then
+				MM:Print(format("|cffff8000%d mail(s) in this batch could not be taken|r - they stay in the inbox.", j.leftover))
+				j.leftover = nil
+			end
 			Inbox:WaitForServer(n)
 			return
 		end
+	end
+	if j.leftover and j.leftover > 0 then
+		MM:Print(format("|cffff8000%d mail(s) could not be taken|r - the server refused them, your bags are full or it is a unique item you already carry. Click Open All to try again.", j.leftover))
 	end
 	if j.skippedCOD and j.skippedCOD > 0 then
 		MM:Print(format("Skipped %d CoD/GM mail(s).", j.skippedCOD))
@@ -258,13 +286,14 @@ function Inbox:WaitForServer(shown)
 	local j = Inbox.busy
 	j.waiting, j.waitFrom, j.waitStart = true, shown, GetTime()
 	if not j.waitMsg then
-		MM:Print("More mail is waiting on the server - refreshing (the server allows this about once a minute)...")
+		MM:Print("More mail is waiting on the server - asking for the next batch (some servers only allow this once a minute)...")
 		j.waitMsg = true
 	end
 	local function tick()
 		if not Inbox.busy or not Inbox.busy.waiting then return end
 		local waited = floor(GetTime() - j.waitStart)
-		if waited > 0 and waited % 10 == 0 then CheckInbox() end
+		-- ask often at first (servers without a limit answer right away), then every 5s
+		if waited > 0 and ((waited <= 20 and waited % 2 == 0) or waited % 5 == 0) then CheckInbox() end
 		Inbox:UpdateSummary()
 		if waited > 180 then
 			MM:Print("The server didn't send more mail. Stopped.")
@@ -285,7 +314,7 @@ function Inbox:CheckWaiting()
 	if n > j.waitFrom then
 		j.waiting = nil
 		MM:Cancel(waitTimer)
-		invFull, pass, lastRemaining = nil, 1, nil
+		invFull, pass, lastRemaining, j.stuck = nil, 1, nil, nil
 		local list = BuildTargets(j)
 		if #list == 0 then return Inbox:AfterPasses() end
 		BeginPass(list)
@@ -328,6 +357,7 @@ function Inbox:Stop(user)
 			stats.req, GetTime() - stats.start, (pass or 1) - 1, stats.waits, stats.waited, stats.timeouts, stats.settle or 0))
 	end
 	stats = nil
+	if not user and MM.Log and MM.Log.Reconcile then MM.Log:Reconcile() end
 	Inbox:SetBusyUI(false)
 	Inbox:UpdateSummary(true)
 	if Inbox.open then Inbox:Snapshot() end

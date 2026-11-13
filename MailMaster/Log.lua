@@ -41,6 +41,49 @@ end
 local session, logged = {}, {}
 local lastItem
 
+-- After Open All: anything still in the inbox was never actually received,
+-- so take it out of the received log again.
+function Log:Reconcile()
+	if not GetInboxNumItems then return end
+	for i = 1, GetInboxNumItems() do
+		local id = MM.Inbox.Identity(i)
+		local e = session[id]
+		if e then
+			local _, _, money = select(3, GetInboxHeaderInfo(i))
+			if money and money > 0 and logged[id .. ":m"] then
+				logged[id .. ":m"] = nil
+				e.m = nil
+			end
+			for a = 1, ATTACHMENTS_MAX_RECEIVE or 12 do
+				local link = GetInboxItemLink(i, a)
+				if link and logged[id .. ":" .. a] then
+					logged[id .. ":" .. a] = nil
+					local iid = MM:ItemID(link)
+					local _, _, count = GetInboxItem(i, a)
+					if e.it then
+						for k = 1, #e.it - 1, 2 do
+							if e.it[k] == iid and e.it[k + 1] == (count or 1) then
+								tremove(e.it, k)
+								tremove(e.it, k)
+								break
+							end
+						end
+						if #e.it == 0 then e.it = nil end
+					end
+				end
+			end
+			if not e.it and not e.m then
+				local l = List("received")
+				for k = #l, 1, -1 do
+					if l[k] == e then tremove(l, k) break end
+				end
+				session[id] = nil
+			end
+		end
+	end
+	if frame and frame:IsVisible() and tab == "received" then Log:Refresh() end
+end
+
 local function OnTake(i, a)
 	if not MailMasterDB or not i then return end
 	local sender, subject, money, cod = select(3, GetInboxHeaderInfo(i))
